@@ -1,0 +1,2 @@
+accuracy,DP Disp,time_this_iter_s,done,timesteps_total,episodes_total,training_iteration,experiment_id,date,timestamp,time_total_s,pid,hostname,node_ip,time_since_restore,timesteps_since_restore,iterations_since_restore,trial_id
+0.8846666666666667,0.41978616352201253,28.104247093200684,False,,,1,d8f1d881664349beb819aaa11da2dd71,2021-09-07_23-12-40,1631074360,28.104247093200684,16904,cengyuchendeMacBook-Pro.local,192.168.0.100,28.104247093200684,0,1,ebf24_00000

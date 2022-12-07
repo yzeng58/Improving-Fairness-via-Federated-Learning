@@ -4,7 +4,7 @@
 
 Links: [Paper](https://arxiv.org/pdf/2110.15545.pdf).
 
-![Poster](poster.pdf)
+![Poster](poster.png)
 
 ## Abstract
 

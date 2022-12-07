@@ -95,29 +95,20 @@ The parameters of `sim_dp_man` is almost the same as `sim_dp`, except that one c
 
 Here we provide the tunable hyperparameters for different methods. 
 
-`**kwargs`:
+* `**kwargs`:
 
-​	* FedAvg: `num_rounds`, `local_epochs`, `learning_rate`, `optimizer`
+  * FedAvg: `num_rounds`, `local_epochs`, `learning_rate`, `optimizer`
 
-​	* FedFB: `num_rounds`, `local_epochs`, `learning_rate`, `optimizer`, `alpha`, `bits`
-
-​			 `bits`: Integer. Default `False` or `0`. If positive integer is received, then FedFB is restricted to only exchange `bits` bits of information per communication round. 
-
-​	* CFT: `outer_rounds`, `inner_rounds`, `learning_rate`,`optimizer`, `alpha`
-
-​			`outer_rounds`: Positive integer. Hyperparameter of FairBatch[1], the number of rounds for updating $\lambda$. 
-
-​			`inner_rounds`: Positibe integer. Hyperparameter of FairBatch[1], the number of rounds for learning a model given $\lambda$. 
-
-​	* LFT+Ensemble: `num_epochs`, `learning_rate`, `alpha`, `optimizer`
-
-​			`num_epochs`: Positive integer. Hyperparameter of FairBatch[1], the number of epochs for updating model parameters. 
-
-​	* LFT+FedAvg: `num_rounds`, `local_epochs`, `learning_rate`, `optimizer`, `alpha`
-
-​			`learning_rate`: 1D array. The length of the array depends on how many clients the dataset has. This specifies the learning rate of model parameters for each client. 
-
-​			`alpha`: 1D array. The length of the array depends on how many clients the dataset has. This specifies the step size for updating the $\lambda$ in FaitBatch[1] of each client. 
+  * FedFB: `num_rounds`, `local_epochs`, `learning_rate`, `optimizer`, `alpha`, `bits`
+    *  `bits`: Integer. Default `False` or `0`. If positive integer is received, then FedFB is restricted to only exchange `bits` bits of information per communication round. 
+  * CFT: `outer_rounds`, `inner_rounds`, `learning_rate`,`optimizer`, `alpha`
+    * `outer_rounds`: Positive integer. Hyperparameter of FairBatch[1], the number of rounds for updating $\lambda$. 
+    * `inner_rounds`: Positibe integer. Hyperparameter of FairBatch[1], the number of rounds for learning a model given $\lambda$. 
+  * LFT+Ensemble: `num_epochs`, `learning_rate`, `alpha`, `optimizer``
+    * ``num_epochs`: Positive integer. Hyperparameter of FairBatch[1], the number of epochs for updating model parameters. 
+  * LFT+FedAvg: `num_rounds`, `local_epochs`, `learning_rate`, `optimizer`, `alpha`
+    * `learning_rate`: 1D array. The length of the array depends on how many clients the dataset has. This specifies the learning rate of model parameters for each client. 
+    * `alpha`: 1D array. The length of the array depends on how many clients the dataset has. This specifies the step size for updating the $\lambda$ in FaitBatch[1] of each client. 
 
 ##### Example:
 

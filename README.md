@@ -43,17 +43,17 @@ The first function evaluate the fair learning method given certain model archite
 
 * `method`: String.
 
-​		Options: 
+  Options:
 
-​		* `fedavg`: FedAvg;
+  * `fedavg`: FedAvg;
 
-​		* `fedfb`: FedFB;
+  * `fedfb`: FedFB;
 
-​		* `cflfb`: CFT (Centralized Fair Training), implemented based on FairBatch[1];
+  * `cflfb`: CFT (Centralized Fair Training), implemented based on FairBatch[1];
 
-​		* `uflfb`: LFT+Ensemble (Local Fair Training + Ensemble), where the local fair training is implemented based on FairBatch[1];
+  * `uflfb`: LFT+Ensemble (Local Fair Training + Ensemble), where the local fair training is implemented based on FairBatch[1];
 
-​		* `fflfb`: LFT+FedAvg (Local Fair Training + FedAvg), where the local fair training is implemented based on FairBatch[1];
+  * `fflfb`: LFT+FedAvg (Local Fair Training + FedAvg), where the local fair training is implemented based on FairBatch[1];
 
 * `model`: String. Options:`logisitc regression` and `multilayer perceptron`. Please see our paper for detailed model description. 
 

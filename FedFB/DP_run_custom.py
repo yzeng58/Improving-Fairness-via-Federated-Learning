@@ -9,7 +9,7 @@ from ray import tune
 from ray.tune.schedulers import ASHAScheduler
 import pandas as pd
 
-def run_dp(method, model, synthetic_info, prn = True, seed = 123, trial = False, **kwargs):
+def run_dp(method, model, synthetic_info, prn = True, seed = 123, trial = False, select_round = False, **kwargs):
     # choose the model
     if model == 'logistic regression':
         arc = logReg
@@ -20,7 +20,7 @@ def run_dp(method, model, synthetic_info, prn = True, seed = 123, trial = False,
     Z, num_features, info = 2, 3, synthetic_info
 
     # set up the server
-    server = Server(arc(num_features=num_features, num_classes=2, seed = seed), info, train_prn = False, seed = seed, Z = Z, ret = True, prn = prn, trial = trial)
+    server = Server(arc(num_features=num_features, num_classes=2, seed = seed), info, train_prn = False, seed = seed, Z = Z, ret = True, prn = prn, trial = trial, select_round=select_round)
 
     # execute
     if method == 'fedavg':
@@ -33,6 +33,10 @@ def run_dp(method, model, synthetic_info, prn = True, seed = 123, trial = False,
         acc, dpdisp, classifier = server.CFLFB(**kwargs)
     elif method == 'fflfb':
         acc, dpdisp, classifier = server.FFLFB(**kwargs)
+    elif method == 'fairfed':
+        acc, dpdisp, classifier = server.FairFed(**kwargs)
+    elif method == 'agnosticfair':
+        acc, dpdisp, classifier = server.FAFL(**kwargs)
     else:
         Warning('Does not support this method!')
         exit(1)
@@ -298,12 +302,110 @@ def sim_dp(method, model, synthetic_info, num_sim = 5, seed = 0, resources_per_t
         print("| Accuracy: %.4f(%.4f) | DP Disp: %.4f(%.4f)" % (acc_mean, acc_std, dp_mean, dp_std))
         return acc_mean, acc_std, dp_mean, dp_std
 
-def sim_dp_man(method, model, synthetic_info, num_sim = 5, seed = 0, **kwargs):
+    elif method == 'fairfed':
+        print('--------------------------------Hyperparameter selection--------------------------------')
+        print('--------------------------------Seed:' + str(seed) + '--------------------------------')
+        config = {'lr': tune.grid_search([.001, .005,]),
+                'alpha': tune.grid_search([.0001, .001, .01]),
+                'beta': tune.grid_search([0.02, 1, 50])}
+
+        def trainable(config): 
+            return run_dp(method = method, model = model, synthetic_info = synthetic_info, prn = False, trial = True, seed = seed, learning_rate = config['lr'], alpha = config['alpha'], beta = config['beta'], **kwargs)
+
+        asha_scheduler = ASHAScheduler(
+            time_attr = 'iteration',
+            metric = 'disp',
+            mode = 'min',
+            grace_period = 5)
+
+        reporter = CLIReporter(metric_columns=['loss', 'accuracy', 'iteration', 'disp'])
+
+        analysis = tune.run(
+            trainable,
+            resources_per_trial = resources_per_trial,
+            config = config,
+            num_samples = 1,
+            scheduler=asha_scheduler,
+            progress_reporter=reporter)
+
+        best_trial = analysis.get_best_trial("disp", "min", "last")
+        params = best_trial.config
+        learning_rate, alpha, beta = params['lr'], params['alpha'], params['beta']
+
+        print('--------------------------------Start Simulations--------------------------------')
+        # get test result of the trained model
+        server = Server(arc(num_features=num_features, num_classes=2, seed = seed), info, train_prn = False, seed = seed, Z = Z, ret = True, prn = False)
+        trained_model = copy.deepcopy(server.model)
+        trained_model.load_state_dict(torch.load(os.path.join(best_trial.checkpoint.value, 'checkpoint')))
+        test_acc, n_yz = server.test_inference(trained_model)
+        df = pd.DataFrame([{'accuracy': test_acc, 'DP Disp': DPDisparity(n_yz)}])
+
+        # use the same hyperparameters for other seeds
+        for seed in range(1, num_sim):
+            print('--------------------------------Seed:' + str(seed) + '--------------------------------')
+            result = run_dp(method = method, model = model, dataset = dataset, prn = False, seed = seed, learning_rate = learning_rate, alpha = alpha, beta = beta, **kwargs)
+            df = df.append(pd.DataFrame([result]))
+        df = df.reset_index(drop = True)
+        acc_mean, dp_mean = df.mean()
+        acc_std, dp_std = df.std()
+        print("Result across %d simulations: " % num_sim)
+        print("| Accuracy: %.4f(%.4f) | DP Disp: %.4f(%.4f)" % (acc_mean, acc_std, dp_mean, dp_std))
+        return acc_mean, acc_std, dp_mean, dp_std
+
+    elif method == 'agnosticfair':
+        print('--------------------------------Hyperparameter selection--------------------------------')
+        print('--------------------------------Seed:' + str(seed) + '--------------------------------')
+        config = {'lr': tune.grid_search([.001, .005,]),
+                'penalty': tune.grid_search([0, 10, 100, 200, 500, 1000, 5000, 10000])}
+
+        def trainable(config): 
+            return run_dp(method = method, model = model, synthetic_info = synthetic_info, prn = False, trial = True, seed = seed, learning_rate = config['lr'], penalty = config['penalty'], **kwargs)
+
+        asha_scheduler = ASHAScheduler(
+            time_attr = 'iteration',
+            metric = 'disp',
+            mode = 'min',
+            grace_period = 5)
+
+        reporter = CLIReporter(metric_columns=['loss', 'accuracy', 'iteration', 'disp'])
+
+        analysis = tune.run(
+            trainable,
+            resources_per_trial = resources_per_trial,
+            config = config,
+            num_samples = 1,
+            scheduler=asha_scheduler,
+            progress_reporter=reporter)
+
+        best_trial = analysis.get_best_trial("disp", "min", "last")
+        params = best_trial.config
+        learning_rate, penalty = params['lr'], params['penalty']
+
+        print('--------------------------------Start Simulations--------------------------------')
+        # get test result of the trained model
+        server = Server(arc(num_features=num_features, num_classes=2, seed = seed), info, train_prn = False, seed = seed, Z = Z, ret = True, prn = False)
+        trained_model = copy.deepcopy(server.model)
+        trained_model.load_state_dict(torch.load(os.path.join(best_trial.checkpoint.value, 'checkpoint')))
+        test_acc, n_yz = server.test_inference(trained_model)
+        df = pd.DataFrame([{'accuracy': test_acc, 'DP Disp': DPDisparity(n_yz)}])
+
+        # use the same hyperparameters for other seeds
+        for seed in range(1, num_sim):
+            print('--------------------------------Seed:' + str(seed) + '--------------------------------')
+            result = run_dp(method = method, model = model, synthetic_info = synthetic_info, prn = False, seed = seed, learning_rate = learning_rate, penalty = penalty, **kwargs)
+            df = df.append(pd.DataFrame([result]))
+        df = df.reset_index(drop = True)
+        acc_mean, dp_mean = df.mean()
+        acc_std, dp_std = df.std()
+        print("Result across %d simulations: " % num_sim)
+        print("| Accuracy: %.4f(%.4f) | DP Disp: %.4f(%.4f)" % (acc_mean, acc_std, dp_mean, dp_std))
+        return acc_mean, acc_std, dp_mean, dp_std
+ 
+def sim_dp_man(method, model, synthetic_info, num_sim = 5, seed = 0, select_round = False, **kwargs):
     results = []
     for seed in range(num_sim):
-        results.append(run_dp(method, model, synthetic_info, prn = True, seed = seed, trial = False, **kwargs))
+        results.append(run_dp(method, model, synthetic_info, prn = True, seed = seed, trial = False, select_round=select_round, **kwargs))
     df = pd.DataFrame(results)
-    acc_mean, rp_mean = df.mean()
     acc_mean, dp_mean = df.mean()
     acc_std, dp_std = df.std()
     print("Result across %d simulations: " % num_sim)

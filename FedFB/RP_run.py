@@ -6,7 +6,7 @@ from ray import tune
 from ray.tune.schedulers import ASHAScheduler
 import pandas as pd
 
-def run_rp(method, model, dataset, prn = True, seed = 123, trial = False, **kwargs):
+def run_rp(method, model, dataset, prn = True, seed = 123, trial = False, select_round = False, **kwargs):
     # choose the model
     if model == 'logistic regression':
         arc = logReg
@@ -32,7 +32,7 @@ def run_rp(method, model, dataset, prn = True, seed = 123, trial = False, **kwar
         exit(1)
 
     # set up the server
-    server = Server(arc(num_features=num_features, num_classes=2, seed = seed), info, train_prn = False, seed = seed, Z = Z, ret = True, prn = prn, trial = trial)
+    server = Server(arc(num_features=num_features, num_classes=2, seed = seed), info, train_prn = False, seed = seed, Z = Z, ret = True, prn = prn, trial = trial, select_round = select_round)
 
     # execute
     if method == 'fedavg':
@@ -229,6 +229,9 @@ def sim_rp(method, model, dataset, num_sim = 5, seed = 0, resources_per_trial = 
         config = {'lr': tune.grid_search([.001, .005, .01]),
                 'q': tune.grid_search([0, .001, .01, .1, 1, 2, 5, 10])}
 
+        # config = {'lr': tune.grid_search([.001]),
+        #         'q': tune.grid_search([0])}
+
         def trainable(config): 
             return run_rp(method = method, model = model, dataset = dataset, prn = False, trial = True, seed = seed, learning_rate = config['lr'], q = config['q'])
 
@@ -252,12 +255,14 @@ def sim_rp(method, model, dataset, num_sim = 5, seed = 0, resources_per_trial = 
         params = best_trial.config
         learning_rate, q = params['lr'], params['q']
 
+        print("Selected hyperparameters: | learning rate: %.4f | q: %d" % (learning_rate, q))
         print('--------------------------------Start Simulations--------------------------------')
         # get test result of the trained model
         server = Server(arc(num_features=num_features, num_classes=2, seed = seed), info, train_prn = False, seed = seed, Z = Z, ret = True, prn = False)
         trained_model = copy.deepcopy(server.model)
         trained_model.load_state_dict(torch.load(os.path.join(best_trial.checkpoint.value, 'checkpoint')))
         test_acc, a_z, loss_z = server.test_inference(trained_model)
+        print("Test results: | Accuracy: %.4f | Representation disparity: %.4f" % (test_acc, RepresentationDisparity(loss_z)))
         df = pd.DataFrame([{'accuracy': test_acc, 'Var(accuracy)': accVariance(a_z), 'Representation disparity': RepresentationDisparity(loss_z)}])
 
         # use the same hyperparameters for other seeds
@@ -265,6 +270,7 @@ def sim_rp(method, model, dataset, num_sim = 5, seed = 0, resources_per_trial = 
             print('--------------------------------Seed:' + str(seed) + '--------------------------------')
             result = run_rp(method = method, model = model, dataset = dataset, prn = False, seed = seed, learning_rate = learning_rate, q = q)
             df = df.append(pd.DataFrame([result]))
+            print("Test results: | Accuracy: %.4f | Representation disparity: %.4f" % (result['accuracy'], result['Representation disparity']))
         df = df.reset_index(drop = True)
         acc_mean, va_mean, rp_mean = df.mean()
         acc_std, va_std, rp_std = df.std()
@@ -328,10 +334,10 @@ def sim_rp(method, model, dataset, num_sim = 5, seed = 0, resources_per_trial = 
         Warning('Does not support this method!')
         exit(1)
 
-def sim_rp_man(method, model, dataset, num_sim = 5, seed = 0, **kwargs):
+def sim_rp_man(method, model, dataset, num_sim = 5, seed = 0, select_round = False, **kwargs):
     results = []
     for seed in range(num_sim):
-        results.append(run_rp(method, model, dataset, prn = True, seed = seed, trial = False, **kwargs))
+        results.append(run_rp(method, model, dataset, prn = True, seed = seed, trial = False, select_round = select_round, **kwargs))
     df = pd.DataFrame(results)
     acc_mean, va_mean, rp_mean = df.mean()
     acc_std, va_std, rp_std = df.std()

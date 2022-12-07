@@ -14,7 +14,7 @@ os.environ['KMP_DUPLICATE_LIB_OK']='True'
 #########################################################
 
 class Server(object):
-    def __init__(self, model, dataset_info, seed = 123, num_workers = 4, ret = False, 
+    def __init__(self, model, dataset_info, seed = 123, num_workers = 4, ret = False, select_round = False,
                 train_prn = False, batch_size = 128, print_every = 1, fraction_clients = 1, Z = 2, trial = False, prn = True):
         """
         Server execution.
@@ -49,6 +49,7 @@ class Server(object):
         self.model = model
         self.seed = seed
         self.num_workers = num_workers
+        self.select_round = select_round
 
         self.ret = ret
         self.prn = prn
@@ -181,7 +182,7 @@ class Server(object):
 
         if self.ret: return test_acc, rd, rp, self.model
 
-    def FedFB(self, num_rounds = 10, local_epochs = 30, learning_rate = 0.005, optimizer = 'adam', alpha = 0.3):
+    def FedFB(self, num_rounds = 10, local_epochs = 30, learning_rate = 0.005, optimizer = 'adam', alpha = 0.3, bits = False):
         np.random.seed(self.seed)
         random.seed(self.seed)
         torch.manual_seed(self.seed)
@@ -190,6 +191,7 @@ class Server(object):
         train_loss, train_accuracy = [], []
         start_time = time.time()
         weights = self.model.state_dict()
+        if self.select_round: best_fairness = float('inf')
 
         # the number of samples whose label is y and sensitive attribute is z
         m_z, lbd = [], []
@@ -235,7 +237,7 @@ class Server(object):
                                             idxs=self.clients_idx[c], batch_size = self.batch_size, option = "FB-Variant1", 
                                             seed = self.seed, prn = self.train_prn, Z = self.Z)
                 # validation dataset inference
-                acc_z[c], loss_z[c], acc_loss, fair_loss = local_model.inference(model = self.model, train = True) 
+                acc_z[c], loss_z[c], acc_loss, fair_loss = local_model.inference(model = self.model, bits = bits) 
                 list_acc.append(acc_z[c])
                     
                 if self.prn: print("Client %d: accuracy loss: %.2f | fairness loss %.2f" % (
@@ -267,7 +269,13 @@ class Server(object):
                     torch.save(self.model.state_dict(), path)
                     
                 tune.report(loss = loss, accuracy = train_accuracy[-1], va = accVariance(acc_z), iteration = round_+1, rp = RepresentationDisparity(loss_z))
+            if self.select_round: 
+                if best_fairness > RepresentationDisparity(loss_z): 
+                    best_fairness = RepresentationDisparity(loss_z)
+                    test_model = copy.deepcopy(self.model.state_dict())
 
+        # Test inference after completion of training
+        if self.select_round: self.model.load_state_dict(test_model)
         # Test inference after completion of training
         test_acc, acc_z, loss_z = self.test_inference(self.model, self.test_dataset)
         rd = accVariance(acc_z)
@@ -286,7 +294,7 @@ class Server(object):
 
         if self.ret: return test_acc, rd, rp, self.model
 
-    def GIFAIR(self, num_rounds = 10, local_epochs = 30, learning_rate = 0.005, optimizer = 'adam', alpha = 0.3):
+    def GIFAIR(self, num_rounds = 10, local_epochs = 30, learning_rate = 0.005, optimizer = 'adam', alpha = 0.3, bits = False):
         np.random.seed(self.seed)
         random.seed(self.seed)
         torch.manual_seed(self.seed)
@@ -295,6 +303,7 @@ class Server(object):
         train_loss, train_accuracy = [], []
         start_time = time.time()
         weights = self.model.state_dict()
+        if self.select_round: best_fairness = float('inf')
 
         # the number of samples whose label is y and sensitive attribute is z
         m_z, lbd = [], []
@@ -340,7 +349,7 @@ class Server(object):
                                             idxs=self.clients_idx[c], batch_size = self.batch_size, option = "FB-Variant1", 
                                             seed = self.seed, prn = self.train_prn, Z = self.Z)
                 # validation dataset inference
-                acc_z[c], loss_z[c], acc_loss, fair_loss = local_model.inference(model = self.model, train = True) 
+                acc_z[c], loss_z[c], acc_loss, fair_loss = local_model.inference(model = self.model, bits = bits) 
                 list_acc.append(acc_z[c])
                     
                 if self.prn: print("Client %d: accuracy loss: %.2f | fairness loss %.2f" % (
@@ -367,7 +376,13 @@ class Server(object):
                     torch.save(self.model.state_dict(), path)
                     
                 tune.report(loss = loss, accuracy = train_accuracy[-1], va = accVariance(acc_z), iteration = round_+1, rp = RepresentationDisparity(loss_z))
+            if self.select_round: 
+                if best_fairness > RepresentationDisparity(loss_z): 
+                    best_fairness = RepresentationDisparity(loss_z)
+                    test_model = copy.deepcopy(self.model.state_dict())
 
+        # Test inference after completion of training
+        if self.select_round: self.model.load_state_dict(test_model)
         # Test inference after completion of training
         test_acc, acc_z, loss_z = self.test_inference(self.model, self.test_dataset)
         rd = accVariance(acc_z)
@@ -397,6 +412,7 @@ class Server(object):
         train_loss, train_accuracy = [], []
         start_time = time.time()
         tem_model = copy.deepcopy(self.model)
+        if self.select_round: best_fairness = float('inf')
         
         for round_ in tqdm(range(num_rounds)):
             local_losses = []
@@ -467,7 +483,13 @@ class Server(object):
                     torch.save(self.model.state_dict(), path)
                     
                 tune.report(loss = loss, accuracy = train_accuracy[-1], va = accVariance(acc_z), iteration = round_+1, rp =  RepresentationDisparity(loss_z))
+            if self.select_round: 
+                if best_fairness > RepresentationDisparity(loss_z): 
+                    best_fairness = RepresentationDisparity(loss_z)
+                    test_model = copy.deepcopy(self.model.state_dict())
 
+        # Test inference after completion of training
+        if self.select_round: self.model.load_state_dict(test_model)
         # Test inference after completion of training
         test_acc, acc_z, loss_z = self.test_inference()
         rd = accVariance(acc_z)
@@ -498,6 +520,7 @@ class Server(object):
         weights = self.model.state_dict()
 
         models_v = [copy.deepcopy(self.model) for _ in range(self.num_clients)]
+        if self.select_round: best_fairness = float('inf')
         # models_w = copy.deepcopy(models_v)
 
         for round_ in tqdm(range(num_rounds)):
@@ -564,7 +587,13 @@ class Server(object):
                     torch.save([m.state_dict() for m in models_v], path)
                     
                 tune.report(loss = loss, accuracy = train_accuracy[-1], va = accVariance(acc_z), iteration = round_+1, rp = RepresentationDisparity(loss_z))
+            if self.select_round: 
+                if best_fairness > RepresentationDisparity(loss_z): 
+                    best_fairness = RepresentationDisparity(loss_z)
+                    test_model = copy.deepcopy(models_v)
 
+        # Test inference after completion of training
+        if self.select_round: models_v = test_model
         # Test inference after completion of training
         test_acc, acc_z, loss_z = self.mtl_inference(models = models_v)
         rd = accVariance(acc_z)
@@ -814,6 +843,7 @@ class Client(object):
             deltawkt_norm2 += torch.norm(deltawkt[key])**2
             deltakt[key] = deltawkt[key] * fk**q
         hkt = q*fk**(q-1) * deltawkt_norm2 + L * fk**q
+            
         return deltakt, hkt
 
     def ditto_update(self, model, global_model, global_round, learning_rate, local_epochs, optimizer, penalty): 
@@ -859,7 +889,7 @@ class Client(object):
         # weight, loss
         return sum(epoch_loss) / len(epoch_loss)
 
-    def inference(self, model, train = False):
+    def inference(self, model, train = False, bits = False):
         """ 
         Returns the inference accuracy, 
                                 loss, 
@@ -897,4 +927,10 @@ class Client(object):
                                          acc_loss + batch_acc_loss.item(), 
                                          fair_loss + batch_fair_loss.item())
         accuracy = correct/total
-        return accuracy, loss/total, acc_loss / num_batch, fair_loss / num_batch
+        
+        if bits:
+            bins = np.linspace(0, 1, 2**bits)
+            loss = bins[np.digitize(loss/total, bins) - 1]
+        else: 
+            loss = loss/total
+        return accuracy, loss, acc_loss / num_batch, fair_loss / num_batch
